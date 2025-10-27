@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 # Bot Token from environment
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-TMDB_API_KEY = os.getenv('TMDB_API_KEY')  # Get free API key from https://www.themoviedb.org/settings/api
+TMDB_API_KEY = os.getenv('TMDB_API_KEY')
+RENDER_EXTERNAL_URL = os.getenv('RENDER_EXTERNAL_URL', '')
 
 class MovieBot:
     def __init__(self):
@@ -109,10 +110,8 @@ Available Commands:
         if query:
             await query.answer()
             chat_id = query.message.chat_id
-            message_id = query.message.message_id
         else:
             chat_id = update.message.chat_id
-            message_id = None
 
         await context.bot.send_chat_action(chat_id, action='typing')
         
@@ -120,7 +119,7 @@ Available Commands:
         data = self.get_movies("movie/now_playing", {'page': 1})
         
         if not data or 'results' not in data:
-            await self.send_error_message(context, chat_id, message_id)
+            await self.send_error_message(context, chat_id)
             return
 
         movies = data['results'][:5]  # Show first 5 movies
@@ -271,7 +270,7 @@ Available Commands:
         elif query.data == "search":
             await query.message.reply_text("Use the command: /search <movie_name>")
 
-    async def send_error_message(self, context, chat_id, message_id=None):
+    async def send_error_message(self, context, chat_id):
         """Send error message"""
         error_text = "❌ Sorry, I couldn't fetch movie data at the moment. Please try again later."
         await context.bot.send_message(chat_id=chat_id, text=error_text)
@@ -300,6 +299,15 @@ Just click the buttons or use commands to explore!
         """
         await update.message.reply_text(help_text, parse_mode='HTML')
 
+async def set_webhook(application):
+    """Set webhook for Render"""
+    if RENDER_EXTERNAL_URL:
+        webhook_url = f"{RENDER_EXTERNAL_URL}/{BOT_TOKEN}"
+        await application.bot.set_webhook(webhook_url)
+        logger.info(f"Webhook set to: {webhook_url}")
+    else:
+        logger.info("No RENDER_EXTERNAL_URL found, using polling for local development")
+
 def main():
     """Start the bot"""
     if not BOT_TOKEN or not TMDB_API_KEY:
@@ -321,9 +329,22 @@ def main():
     application.add_handler(CommandHandler("help", movie_bot.help_command))
     application.add_handler(CallbackQueryHandler(movie_bot.button_handler))
 
-    # Start the Bot - Use polling for Render
-    logger.info("Bot started using polling...")
-    application.run_polling()
+    # Start the Bot
+    port = int(os.environ.get('PORT', 8443))
+    
+    if RENDER_EXTERNAL_URL:
+        # Production - use webhook
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path=BOT_TOKEN,
+            webhook_url=f"{RENDER_EXTERNAL_URL}/{BOT_TOKEN}",
+            secret_token=None
+        )
+    else:
+        # Local development - use polling
+        logger.info("Starting bot with polling...")
+        application.run_polling()
 
 if __name__ == '__main__':
     main()
