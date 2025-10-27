@@ -3,10 +3,6 @@ import logging
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -15,15 +11,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Bot Token from environment
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-TMDB_API_KEY = os.getenv('TMDB_API_KEY')
-RENDER_EXTERNAL_URL = os.getenv('RENDER_EXTERNAL_URL', '')
-
 class MovieBot:
-    def __init__(self):
+    def __init__(self, token):
+        self.token = token
         self.tmdb_base_url = "https://api.themoviedb.org/3"
         self.image_base_url = "https://image.tmdb.org/t/p/w500"
+        self.tmdb_api_key = os.getenv('TMDB_API_KEY')
         
     async def start(self, update: Update, context: CallbackContext) -> None:
         """Send welcome message when the command /start is issued."""
@@ -60,7 +53,7 @@ Available Commands:
         """Generic method to fetch movies from TMDB API"""
         url = f"{self.tmdb_base_url}/{endpoint}"
         default_params = {
-            'api_key': TMDB_API_KEY,
+            'api_key': self.tmdb_api_key,
             'language': 'en-US'
         }
         if params:
@@ -122,7 +115,7 @@ Available Commands:
             await self.send_error_message(context, chat_id)
             return
 
-        movies = data['results'][:5]  # Show first 5 movies
+        movies = data['results'][:5]
         
         for movie in movies:
             message, poster_url = self.format_movie_message(movie)
@@ -241,7 +234,7 @@ Available Commands:
             await update.message.reply_text(f"No movies found for '{movie_name}'")
             return
 
-        movie = data['results'][0]  # Get first result
+        movie = data['results'][0]
         message, poster_url = self.format_movie_message(movie)
         
         if poster_url:
@@ -299,52 +292,12 @@ Just click the buttons or use commands to explore!
         """
         await update.message.reply_text(help_text, parse_mode='HTML')
 
-async def set_webhook(application):
-    """Set webhook for Render"""
-    if RENDER_EXTERNAL_URL:
-        webhook_url = f"{RENDER_EXTERNAL_URL}/{BOT_TOKEN}"
-        await application.bot.set_webhook(webhook_url)
-        logger.info(f"Webhook set to: {webhook_url}")
-    else:
-        logger.info("No RENDER_EXTERNAL_URL found, using polling for local development")
-
-def main():
-    """Start the bot"""
-    if not BOT_TOKEN or not TMDB_API_KEY:
-        logger.error("Please set BOT_TOKEN and TMDB_API_KEY environment variables")
-        return
-
-    # Create application
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    # Create movie bot instance
-    movie_bot = MovieBot()
-
-    # Add handlers
-    application.add_handler(CommandHandler("start", movie_bot.start))
-    application.add_handler(CommandHandler("latest", movie_bot.send_latest_movies))
-    application.add_handler(CommandHandler("trending", movie_bot.send_trending_movies))
-    application.add_handler(CommandHandler("upcoming", movie_bot.send_upcoming_movies))
-    application.add_handler(CommandHandler("search", movie_bot.search_movie))
-    application.add_handler(CommandHandler("help", movie_bot.help_command))
-    application.add_handler(CallbackQueryHandler(movie_bot.button_handler))
-
-    # Start the Bot
-    port = int(os.environ.get('PORT', 8443))
-    
-    if RENDER_EXTERNAL_URL:
-        # Production - use webhook
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=port,
-            url_path=BOT_TOKEN,
-            webhook_url=f"{RENDER_EXTERNAL_URL}/{BOT_TOKEN}",
-            secret_token=None
-        )
-    else:
-        # Local development - use polling
-        logger.info("Starting bot with polling...")
-        application.run_polling()
-
-if __name__ == '__main__':
-    main()
+    def setup_handlers(self, application):
+        """Setup all command handlers"""
+        application.add_handler(CommandHandler("start", self.start))
+        application.add_handler(CommandHandler("latest", self.send_latest_movies))
+        application.add_handler(CommandHandler("trending", self.send_trending_movies))
+        application.add_handler(CommandHandler("upcoming", self.send_upcoming_movies))
+        application.add_handler(CommandHandler("search", self.search_movie))
+        application.add_handler(CommandHandler("help", self.help_command))
+        application.add_handler(CallbackQueryHandler(self.button_handler))
