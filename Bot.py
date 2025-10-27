@@ -321,25 +321,9 @@ def main():
     application.add_handler(CommandHandler("help", movie_bot.help_command))
     application.add_handler(CallbackQueryHandler(movie_bot.button_handler))
 
-    # Start the Bot
-    if os.getenv('RAILWAY_ENVIRONMENT'):
-        # On Railway, use webhook
-        port = int(os.getenv('PORT', 8443))
-        webhook_url = os.getenv('RAILWAY_STATIC_URL')
-        
-        if webhook_url:
-            application.run_webhook(
-                listen="0.0.0.0",
-                port=port,
-                url_path=BOT_TOKEN,
-                webhook_url=f"{webhook_url}/{BOT_TOKEN}"
-            )
-        else:
-            # Fallback to polling if webhook URL not available
-            application.run_polling()
-    else:
-        # Local development - use polling
-        application.run_polling()
+    # Start the Bot - Use polling for Render
+    logger.info("Bot started using polling...")
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
